@@ -81,6 +81,7 @@ You have three ways, from quickest to most permanent:
 | `always_include_channels` | Trusted channels that skip the engagement and classifier checks (format rules still apply). |
 | `exclude_categories` | Classifier labels to remove. Add `"OTHER"` to also drop compilations, promos and off-topic videos. |
 | `classifier_model` | Claude model used for classification. |
+| `ai_label_filter` | YouTube's "Altered or synthetic content" label. `"show"` (default) badges labeled videos and adds an *AI-labeled only* checkbox to the page. `"require"` keeps only labeled videos (trusted channels excepted). Note that creators only have to apply this label to *realistic* content, so many stylized or animated AI films won't carry it. |
 
 ## Running it on your own computer
 

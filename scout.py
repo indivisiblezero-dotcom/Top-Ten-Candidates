@@ -11,6 +11,8 @@ Pipeline:
   4. Your rules: blocked channels, excluded title keywords
   5. Engagement: minimum views and minimum like/view ratio
   6. LLM classifier: drop tutorials and AI news
+     (optional: ai_label_filter="require" keeps only videos carrying YouTube's
+     "Altered or synthetic content" label; the default "show" just badges them)
   7. Write a clickable HTML review page to docs/ (served by GitHub Pages)
 
 Thresholds live in config.json and can be overridden with environment
@@ -113,7 +115,7 @@ def fetch_details(ids: list[str], api_key: str) -> tuple[list[dict], int]:
         data = yt_get(
             "videos",
             {
-                "part": "snippet,contentDetails,statistics,player",
+                "part": "snippet,contentDetails,statistics,player,status",
                 "id": ",".join(ids[i:i + 50]),
                 # Asking for a max height makes the API return embedWidth/
                 # embedHeight, which reveal the true aspect ratio.
@@ -148,6 +150,7 @@ def normalize(item: dict, queries: list[str]) -> dict:
     sn = item.get("snippet", {})
     st = item.get("statistics", {})
     pl = item.get("player", {})
+    status = item.get("status", {})
     thumbs = sn.get("thumbnails", {})
     thumb = next((thumbs[k]["url"] for k in ("high", "medium", "default") if k in thumbs), "")
     views = as_int(st.get("viewCount")) or 0
@@ -172,6 +175,9 @@ def normalize(item: dict, queries: list[str]) -> dict:
         "comments": as_int(st.get("commentCount")),
         "like_ratio_pct": ratio,
         "queries": queries,
+        # YouTube's "Altered or synthetic content" disclosure. True/False when
+        # YouTube returns it, None when the field is absent.
+        "ai_label": status.get("containsSyntheticMedia"),
     }
 
 
@@ -308,7 +314,7 @@ def classify(videos: list[dict], cfg: dict) -> dict[str, dict]:
 
 PAGE_FIELDS = ["id", "url", "title", "channel", "channel_url", "published", "thumb",
                "duration_s", "views", "likes", "comments", "like_ratio_pct", "queries",
-               "category", "category_reason", "stage", "reason"]
+               "category", "category_reason", "stage", "reason", "ai_label"]
 
 
 def slim(v: dict, with_description: bool) -> dict:
@@ -393,6 +399,10 @@ def run(cfg: dict, out_dir: Path, use_classifier: bool,
             drop(v, "Your rules", r)
             continue
         v["trusted"] = _channel_in(v, cfg.get("always_include_channels", []))
+        if (cfg.get("ai_label_filter", "show") == "require" and not v["trusted"]
+                and v["ai_label"] is not True):
+            drop(v, "AI label", "No altered/synthetic content label")
+            continue
         if not v["trusted"] and (r := engagement_reason(v, cfg)):
             drop(v, "Engagement", r)
             continue
@@ -432,15 +442,20 @@ def run(cfg: dict, out_dir: Path, use_classifier: bool,
             "min_duration_seconds": cfg["min_duration_seconds"],
             "exclude_categories": sorted(excluded),
             "classifier_model": cfg["classifier_model"] if use_classifier else None,
+            "ai_label_filter": cfg.get("ai_label_filter", "show"),
         },
         "stats": {"found": len(videos), "kept": len(kept), "removed": len(removed),
-                  "classified": len(labels), "youtube_quota_units": units},
+                  "classified": len(labels), "youtube_quota_units": units,
+                  "ai_label_returned": sum(v["ai_label"] is not None for v in videos),
+                  "ai_labeled": sum(v["ai_label"] is True for v in videos)},
         "kept": [slim(v, True) for v in kept],
         "removed": [slim(v, False) for v in removed],
     }
     index = write_outputs(out_dir, date_str, payload)
     print(f"{date_str}: found {len(videos)}, kept {len(kept)}, removed {len(removed)} "
-          f"(YouTube quota ~{units} units, {len(to_classify)} sent to classifier) -> {index}")
+          f"(YouTube quota ~{units} units, {len(to_classify)} sent to classifier; "
+          f"AI label returned for {payload['stats']['ai_label_returned']}, "
+          f"set on {payload['stats']['ai_labeled']}) -> {index}")
     return payload
 
 

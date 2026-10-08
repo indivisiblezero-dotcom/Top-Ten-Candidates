@@ -43,6 +43,8 @@ select,input[type=search]{font:inherit;font-size:14px;color:var(--ink);backgroun
 .pill{background:var(--chip);border-radius:999px;padding:2px 9px}
 .pill.r-good{color:var(--good);font-weight:600}.pill.r-mid{color:var(--mid);font-weight:600}.pill.r-low{color:var(--low);font-weight:600}
 .cat{font-size:12px;color:var(--muted)}
+.pill.ai{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.note{margin-top:12px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:13px;color:var(--muted)}
 .cat b{font-weight:600;color:var(--ink);letter-spacing:.03em;font-size:11px}
 details.desc summary{cursor:pointer;color:var(--muted);font-size:13px}
 details.desc p{white-space:pre-wrap;font-size:13px;margin:6px 0 0;color:var(--muted);max-height:220px;overflow:auto;overflow-wrap:anywhere}
@@ -104,11 +106,13 @@ footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid va
   <label>Type
     <select id="cat"><option value="">All</option></select>
   </label>
+  <label><input type="checkbox" id="onlyAi"> AI-labeled only</label>
   <label><input type="checkbox" id="onlyStar"> Shortlisted only</label>
   <span class="count" id="count"></span>
 </div></div>
 
 <div class="wrap">
+  <div class="note" id="aiNote" hidden></div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" hidden>No videos match these filters.</div>
 
@@ -197,7 +201,8 @@ footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid va
         el('div', { class: 'stats' },
           el('span', { class: 'pill', text: num(v.views) + ' views' }),
           el('span', { class: 'pill', text: v.likes == null ? 'likes hidden' : num(v.likes) + ' likes' }),
-          v.like_ratio_pct != null ? el('span', { class: 'pill ' + ratioClass(v.like_ratio_pct), title: 'Likes ÷ views', text: v.like_ratio_pct.toFixed(1) + '%' }) : null),
+          v.like_ratio_pct != null ? el('span', { class: 'pill ' + ratioClass(v.like_ratio_pct), title: 'Likes ÷ views', text: v.like_ratio_pct.toFixed(1) + '%' }) : null,
+          v.ai_label ? el('span', { class: 'pill ai', title: 'Creator applied YouTube\'s "Altered or synthetic content" label', text: 'AI label' }) : null),
         el('div', { class: 'cat', title: v.category_reason || '' }, el('b', { text: v.category }), ' — ' + (v.category_reason || '')),
         v.description ? el('details', { class: 'desc' }, el('summary', { text: 'Description' }), el('p', { text: v.description })) : null,
         btn));
@@ -214,30 +219,44 @@ footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid va
     const minR = parseFloat($('ratio').value);
     const cat = $('cat').value;
     const onlyStar = $('onlyStar').checked;
+    const onlyAi = $('onlyAi').checked;
     $('ratioVal').textContent = minR.toFixed(1) + '%';
     const list = D.kept.filter(v =>
       (!q || (v.title + ' ' + v.channel + ' ' + (v.description || '')).toLowerCase().includes(q)) &&
       (v.like_ratio_pct == null ? minR <= S.min_like_ratio_pct : v.like_ratio_pct >= minR) &&
       (!cat || v.category === cat) &&
-      (!onlyStar || shortlist[v.id])
+      (!onlyStar || shortlist[v.id]) &&
+      (!onlyAi || v.ai_label === true)
     ).sort(sorters[$('sort').value]);
     $('grid').replaceChildren(...list.map(card));
     $('empty').hidden = list.length > 0;
     $('count').textContent = `Showing ${list.length} of ${D.kept.length}`;
   }
-  ['q', 'sort', 'ratio', 'cat', 'onlyStar'].forEach(id => $(id).addEventListener('input', render));
+  ['q', 'sort', 'ratio', 'cat', 'onlyStar', 'onlyAi'].forEach(id => $(id).addEventListener('input', render));
 
   // ---------- filtered-out section ----------
   $('removedTitle').textContent = `Filtered out (${D.removed.length}) — check for false rejections`;
   const stages = {};
   D.removed.forEach(v => (stages[v.stage] ||= []).push(v));
-  const order = ['Classifier', 'Engagement', 'Your rules', 'Format'];
+  const order = ['Classifier', 'AI label', 'Engagement', 'Your rules', 'Format'];
   $('removedBody').append(...order.filter(s => stages[s]).map(s =>
     el('div', { class: 'group' },
       el('h3', { text: `${s} (${stages[s].length})` }),
       el('ul', { class: 'rlist' }, stages[s].map(v =>
         el('li', {}, el('a', { href: v.url, target: '_blank', rel: 'noopener', title: v.title, text: v.title }),
           el('span', { text: v.reason })))))));
+
+  // ---------- AI label note ----------
+  const st = D.stats || {};
+  if (st.ai_label_returned === 0 && D.stats.found > 0) {
+    $('aiNote').hidden = false;
+    $('aiNote').textContent = "YouTube didn't return the \"Altered or synthetic content\" label for any video today, so the AI-labeled filter has nothing to show.";
+    $('onlyAi').disabled = true;
+  } else if (st.ai_label_returned != null) {
+    $('aiNote').hidden = false;
+    $('aiNote').textContent = `${st.ai_labeled} of ${D.stats.found} videos found today carry YouTube's "Altered or synthetic content" label` +
+      (S.ai_label_filter === 'require' ? ' (only labeled videos were kept).' : '.');
+  }
 
   // ---------- footer ----------
   $('footer').textContent =
