@@ -1,0 +1,73 @@
+name: Daily AI video scout
+
+on:
+  schedule:
+    # Target: 12:15 AM Pacific, scanning the Pacific day that just ended.
+    # GitHub cron is UTC-only and ignores daylight saving, so both times run:
+    #   07:15 UTC = 12:15 AM PDT (summer)  /  11:15 PM PST (winter)
+    #   08:15 UTC =  1:15 AM PDT (summer)  /  12:15 AM PST (winter)
+    # The extra run finds that day already done and exits in seconds.
+    # The 15-minute buffer gives YouTube time to index late-night uploads.
+    - cron: "15 7 * * *"
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Day to scan, YYYY-MM-DD (blank = yesterday, Pacific). Manual runs always redo the day."
+        required: false
+        default: ""
+      min_like_ratio_pct:
+        description: "Min like/view ratio in % for this run (blank = use repository variable or config.json)"
+        required: false
+        default: ""
+      min_views:
+        description: "Min views for this run (blank = use repository variable or config.json)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-scout
+  cancel-in-progress: false
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scout
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Priority: manual-run input > repository variable > config.json
+          MIN_LIKE_RATIO_PCT: ${{ inputs.min_like_ratio_pct || vars.MIN_LIKE_RATIO_PCT }}
+          MIN_VIEWS: ${{ inputs.min_views || vars.MIN_VIEWS }}
+          SCAN_DATE: ${{ inputs.date }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          args=()
+          [ -n "$SCAN_DATE" ] && args+=(--date "$SCAN_DATE")
+          [ "$MANUAL" = "true" ] && args+=(--force)
+          python scout.py "${args[@]}"
+
+      - name: Publish results
+        env:
+          SCAN_DATE: ${{ inputs.date }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet || git commit -m "Scout results ${SCAN_DATE:-$(TZ=America/Los_Angeles date -d yesterday +%F)}"
+          git push
