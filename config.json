@@ -1,0 +1,20 @@
+{
+  "queries": ["AI film", "AI video", "AI music video"],
+  "pages_per_query": 3,
+  "relevance_language": "en",
+  "timezone": "America/Los_Angeles",
+
+  "min_duration_seconds": 60,
+
+  "min_like_ratio_pct": 2.0,
+  "min_views": 50,
+  "hidden_likes": "include",
+
+  "exclude_title_keywords": [],
+  "blocked_channels": [],
+  "always_include_channels": [],
+
+  "classifier_model": "claude-haiku-5-5",
+  "classifier_batch_size": 20,
+  "exclude_categories": ["TUTORIAL", "NEWS"]
+}

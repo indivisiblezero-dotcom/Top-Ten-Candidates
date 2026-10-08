@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Video Scout</title>
+<style>
+:root{
+  --bg:#f6f5f2;--card:#fff;--ink:#1c1b19;--muted:#6b6862;--line:#e3e0da;--chip:#efece6;
+  --accent:#c2410c;--accent-ink:#fff;--good:#15803d;--mid:#a16207;--low:#9a3412;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#141413;--card:#1e1d1b;--ink:#ecebe7;--muted:#a29f97;--line:#34322e;--chip:#2a2926;
+  --accent:#f97316;--accent-ink:#141413;--good:#4ade80;--mid:#facc15;--low:#fb923c;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:72px}
+a{color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+header{padding-top:24px;padding-bottom:12px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end}
+h1{margin:0;font-size:26px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin-top:4px;font-size:14px}
+.nav{display:flex;gap:8px;align-items:center;font-size:14px}
+select,input[type=search]{font:inherit;font-size:14px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.toolbar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.toolbar .wrap{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-top:10px;padding-bottom:10px;font-size:14px}
+.toolbar label{display:flex;gap:6px;align-items:center;color:var(--muted)}
+.toolbar input[type=search]{min-width:200px;flex:1;max-width:320px}
+.toolbar input[type=range]{width:140px;accent-color:var(--accent)}
+.count{margin-left:auto;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;margin-top:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card.starred{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.thumb{position:relative;display:block;aspect-ratio:16/9;background:#000}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.82);color:#fff;font-size:12px;padding:2px 6px;border-radius:4px;font-variant-numeric:tabular-nums}
+.body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:7px;flex:1}
+.title{font-weight:600;text-decoration:none;font-size:15.5px;line-height:1.3}
+.title:hover{text-decoration:underline}
+.meta{color:var(--muted);font-size:13px}
+.meta a{text-decoration:none}.meta a:hover{text-decoration:underline}
+.stats{display:flex;gap:6px;flex-wrap:wrap;font-size:12.5px;font-variant-numeric:tabular-nums}
+.pill{background:var(--chip);border-radius:999px;padding:2px 9px}
+.pill.r-good{color:var(--good);font-weight:600}.pill.r-mid{color:var(--mid);font-weight:600}.pill.r-low{color:var(--low);font-weight:600}
+.cat{font-size:12px;color:var(--muted)}
+.cat b{font-weight:600;color:var(--ink);letter-spacing:.03em;font-size:11px}
+details.desc summary{cursor:pointer;color:var(--muted);font-size:13px}
+details.desc p{white-space:pre-wrap;font-size:13px;margin:6px 0 0;color:var(--muted);max-height:220px;overflow:auto;overflow-wrap:anywhere}
+.star{margin-top:auto;align-self:flex-start;border:1px solid var(--line);background:none;color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
+.star:hover{border-color:var(--accent)}
+.star[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.empty{color:var(--muted);padding:40px 0;text-align:center}
+section.removed{margin-top:36px}
+section.removed>details>summary{cursor:pointer;font-weight:600;font-size:16px}
+.group{margin-top:14px}
+.group h3{font-size:14px;margin:0 0 6px;color:var(--muted);font-weight:600}
+.rlist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.rlist li{display:flex;gap:12px;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--line);font-size:13.5px}
+.rlist li:first-child{border-top:0}
+.rlist a{text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rlist a:hover{text-decoration:underline}
+.rlist span{color:var(--muted);flex-shrink:0;max-width:50%;text-align:right}
+footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:12px}
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--card);border-top:1px solid var(--line)}
+.bar .wrap{display:flex;gap:10px;align-items:center;padding-top:10px;padding-bottom:10px;font-size:14px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.panel{max-height:45vh;overflow:auto;border-bottom:1px solid var(--line)}
+.panel ol{margin:10px 0;padding-left:22px;font-size:14px}
+.panel li{margin:4px 0}
+.panel .x{border:0;background:none;color:var(--muted);cursor:pointer;font:inherit}
+.panel small{color:var(--muted)}
+@media (max-width:600px){h1{font-size:22px}.count{margin-left:0;width:100%}.rlist span{display:none}}
+</style>
+</head>
+<body>
+<script id="scout-data" type="application/json">__SCOUT_DATA__</script>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AI Video Scout</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+    <div class="nav">
+      <a id="latest" href="#">Latest</a>
+      <select id="archive" aria-label="Past days"></select>
+    </div>
+  </header>
+</div>
+
+<div class="toolbar"><div class="wrap">
+  <input type="search" id="q" placeholder="Search titles, channels, descriptions" aria-label="Search">
+  <label>Sort
+    <select id="sort">
+      <option value="ratio">Like/view ratio</option>
+      <option value="views">Views</option>
+      <option value="likes">Likes</option>
+      <option value="newest">Newest</option>
+      <option value="longest">Longest</option>
+    </select>
+  </label>
+  <label>Min like/view <input type="range" id="ratio" step="0.5"> <b id="ratioVal"></b></label>
+  <label>Type
+    <select id="cat"><option value="">All</option></select>
+  </label>
+  <label><input type="checkbox" id="onlyStar"> Shortlisted only</label>
+  <span class="count" id="count"></span>
+</div></div>
+
+<div class="wrap">
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" hidden>No videos match these filters.</div>
+
+  <section class="removed">
+    <details>
+      <summary id="removedTitle"></summary>
+      <div id="removedBody"></div>
+    </details>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<div class="bar">
+  <div class="panel" id="panel" hidden><div class="wrap"><ol id="slList"></ol></div></div>
+  <div class="wrap">
+    <button class="btn primary" id="slToggle">★ <span id="slCount">0</span> shortlisted</button>
+    <button class="btn" id="slCopy">Copy as text</button>
+    <button class="btn" id="slClear">Clear</button>
+    <small style="color:var(--muted)" id="slMsg"></small>
+  </div>
+</div>
+
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('scout-data').textContent);
+  const $ = id => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v);
+    }
+    kids.flat().forEach(c => c != null && n.append(c));
+    return n;
+  };
+
+  // ---------- shortlist (kept in this browser, shared across all days) ----------
+  const KEY = 'ai-video-scout-shortlist';
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
+  const save = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+  let shortlist = load();
+
+  // ---------- formatting ----------
+  const num = n => n == null ? '–' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'K' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n);
+  const dur = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+  const when = iso => new Date(iso).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const S = D.settings;
+  const ratioClass = r => r == null ? '' : r >= S.min_like_ratio_pct * 2 ? 'r-good' : r >= S.min_like_ratio_pct * 1.3 ? 'r-mid' : 'r-low';
+
+  // ---------- header / nav ----------
+  $('sub').textContent = `${D.date_label} · uploads published ${D.window_label} · ${D.stats.kept} candidates from ${D.stats.found} found`;
+  $('latest').href = D.nav.latest;
+  D.archive.forEach(d => $('archive').append(el('option', { value: d, text: d, ...(d === D.date ? { selected: '' } : {}) })));
+  $('archive').addEventListener('change', e => { location.href = D.nav.archive_prefix + e.target.value + '.html'; });
+
+  // ---------- controls ----------
+  const maxRatio = Math.max(20, Math.ceil(Math.max(0, ...D.kept.map(v => v.like_ratio_pct || 0))));
+  Object.assign($('ratio'), { min: S.min_like_ratio_pct, max: maxRatio, value: S.min_like_ratio_pct });
+  const cats = [...new Set(D.kept.map(v => v.category))].sort();
+  cats.forEach(c => $('cat').append(el('option', { value: c, text: c[0] + c.slice(1).toLowerCase() })));
+
+  const sorters = {
+    ratio: (a, b) => (b.like_ratio_pct ?? -1) - (a.like_ratio_pct ?? -1),
+    views: (a, b) => b.views - a.views,
+    likes: (a, b) => (b.likes ?? -1) - (a.likes ?? -1),
+    newest: (a, b) => b.published.localeCompare(a.published),
+    longest: (a, b) => b.duration_s - a.duration_s,
+  };
+
+  function card(v) {
+    const starred = !!shortlist[v.id];
+    const btn = el('button', { class: 'star', 'aria-pressed': String(starred), text: starred ? '★ Shortlisted' : '☆ Shortlist' });
+    const c = el('article', { class: 'card' + (starred ? ' starred' : '') },
+      el('a', { class: 'thumb', href: v.url, target: '_blank', rel: 'noopener' },
+        el('img', { src: v.thumb, alt: '', loading: 'lazy' }),
+        el('span', { class: 'dur', text: dur(v.duration_s) })),
+      el('div', { class: 'body' },
+        el('a', { class: 'title', href: v.url, target: '_blank', rel: 'noopener', text: v.title }),
+        el('div', { class: 'meta' },
+          el('a', { href: v.channel_url, target: '_blank', rel: 'noopener', text: v.channel }),
+          ' · ' + when(v.published)),
+        el('div', { class: 'stats' },
+          el('span', { class: 'pill', text: num(v.views) + ' views' }),
+          el('span', { class: 'pill', text: v.likes == null ? 'likes hidden' : num(v.likes) + ' likes' }),
+          v.like_ratio_pct != null ? el('span', { class: 'pill ' + ratioClass(v.like_ratio_pct), title: 'Likes ÷ views', text: v.like_ratio_pct.toFixed(1) + '%' }) : null),
+        el('div', { class: 'cat', title: v.category_reason || '' }, el('b', { text: v.category }), ' — ' + (v.category_reason || '')),
+        v.description ? el('details', { class: 'desc' }, el('summary', { text: 'Description' }), el('p', { text: v.description })) : null,
+        btn));
+    btn.addEventListener('click', () => {
+      if (shortlist[v.id]) delete shortlist[v.id];
+      else shortlist[v.id] = { title: v.title, channel: v.channel, url: v.url, date: D.date };
+      save(shortlist); render(); renderShortlist();
+    });
+    return c;
+  }
+
+  function render() {
+    const q = $('q').value.trim().toLowerCase();
+    const minR = parseFloat($('ratio').value);
+    const cat = $('cat').value;
+    const onlyStar = $('onlyStar').checked;
+    $('ratioVal').textContent = minR.toFixed(1) + '%';
+    const list = D.kept.filter(v =>
+      (!q || (v.title + ' ' + v.channel + ' ' + (v.description || '')).toLowerCase().includes(q)) &&
+      (v.like_ratio_pct == null ? minR <= S.min_like_ratio_pct : v.like_ratio_pct >= minR) &&
+      (!cat || v.category === cat) &&
+      (!onlyStar || shortlist[v.id])
+    ).sort(sorters[$('sort').value]);
+    $('grid').replaceChildren(...list.map(card));
+    $('empty').hidden = list.length > 0;
+    $('count').textContent = `Showing ${list.length} of ${D.kept.length}`;
+  }
+  ['q', 'sort', 'ratio', 'cat', 'onlyStar'].forEach(id => $(id).addEventListener('input', render));
+
+  // ---------- filtered-out section ----------
+  $('removedTitle').textContent = `Filtered out (${D.removed.length}) — check for false rejections`;
+  const stages = {};
+  D.removed.forEach(v => (stages[v.stage] ||= []).push(v));
+  const order = ['Classifier', 'Engagement', 'Your rules', 'Format'];
+  $('removedBody').append(...order.filter(s => stages[s]).map(s =>
+    el('div', { class: 'group' },
+      el('h3', { text: `${s} (${stages[s].length})` }),
+      el('ul', { class: 'rlist' }, stages[s].map(v =>
+        el('li', {}, el('a', { href: v.url, target: '_blank', rel: 'noopener', title: v.title, text: v.title }),
+          el('span', { text: v.reason })))))));
+
+  // ---------- footer ----------
+  $('footer').textContent =
+    `Searches: ${S.queries.join(', ')}. Thresholds for this run: like/view ≥ ${S.min_like_ratio_pct}%, views ≥ ${S.min_views}, ` +
+    `length ≥ ${S.min_duration_seconds}s, removed types: ${S.exclude_categories.join(', ') || 'none'}. ` +
+    `The slider above can only raise the like/view threshold; to lower it, change MIN_LIKE_RATIO_PCT in the repository's Actions variables. ` +
+    `Generated ${new Date(D.generated_at).toLocaleString()}.`;
+
+  // ---------- shortlist bar ----------
+  function renderShortlist() {
+    const items = Object.entries(shortlist).sort((a, b) => b[1].date.localeCompare(a[1].date));
+    $('slCount').textContent = items.length;
+    $('slList').replaceChildren(...items.map(([id, s]) =>
+      el('li', {}, el('a', { href: s.url, target: '_blank', rel: 'noopener', text: s.title }),
+        el('small', { text: ` — ${s.channel} · ${s.date} ` }),
+        el('button', { class: 'x', title: 'Remove', text: '✕', onclick: () => { delete shortlist[id]; save(shortlist); render(); renderShortlist(); } }))));
+    if (!items.length) $('slList').append(el('li', { text: 'Nothing shortlisted yet. Shortlists carry over between days in this browser.' }));
+  }
+  $('slToggle').addEventListener('click', () => { $('panel').hidden = !$('panel').hidden; });
+  $('slCopy').addEventListener('click', async () => {
+    const text = Object.values(shortlist).map((s, i) => `${i + 1}. ${s.title} — ${s.channel} — ${s.url}`).join('\n');
+    try { await navigator.clipboard.writeText(text); $('slMsg').textContent = 'Copied.'; }
+    catch { $('slMsg').textContent = 'Copy blocked by the browser; open the list and copy manually.'; }
+    setTimeout(() => { $('slMsg').textContent = ''; }, 2500);
+  });
+  $('slClear').addEventListener('click', () => {
+    if (confirm('Clear the whole shortlist?')) { shortlist = {}; save(shortlist); render(); renderShortlist(); }
+  });
+
+  render(); renderShortlist();
+})();
+</script>
+</body>
+</html>
