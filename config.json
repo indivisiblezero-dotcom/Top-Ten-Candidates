@@ -1,13 +1,13 @@
 {
   "queries": ["AI film", "AI video", "AI music video"],
-  "pages_per_query": 3,
+  "pages_per_query": 6,
   "relevance_language": "en",
   "timezone": "America/Los_Angeles",
 
   "min_duration_seconds": 60,
 
-  "min_like_ratio_pct": 2.0,
-  "min_views": 50,
+  "min_like_ratio_pct": 1.0,
+  "min_views": 1,
   "hidden_likes": "include",
 
   "exclude_title_keywords": [],
