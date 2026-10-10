@@ -18,5 +18,5 @@
   "classifier_batch_size": 20,
   "exclude_categories": ["TUTORIAL", "NEWS"],
 
-  "ai_label_filter": ["show"],
+  "ai_label_filter": "show"
 }
