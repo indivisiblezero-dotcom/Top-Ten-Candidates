@@ -3,7 +3,9 @@
 AI Video Scout - finds new AI films and music videos on YouTube each day.
 
 Pipeline:
-  1. Search YouTube for each query, limited to one full Pacific calendar day
+  1. Search YouTube for each query, limited to one full Pacific calendar day;
+     busy terms are searched in extra time windows so YouTube's ~500-result
+     limit doesn't cut them off (see search_videos)
      (by default the day that just ended, so a run at 12:15 AM covers
      12:00:00 AM - 11:59:59 PM of the previous day)
   2. Fetch details (duration, stats, aspect ratio) for every hit
@@ -75,38 +77,105 @@ def yt_get(endpoint: str, params: dict, api_key: str) -> dict:
     raise RuntimeError(f"YouTube {endpoint} kept returning server errors")
 
 
-def search_videos(cfg: dict, api_key: str, start: dt.datetime, end: dt.datetime) -> tuple[dict[str, list[str]], int]:
-    """Return {video_id: [queries that found it]} and quota units used."""
+def _iso(t: dt.datetime) -> str:
+    return t.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_ts(value: str) -> dt.datetime | None:
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+
+
+def search_videos(cfg: dict, api_key: str, start: dt.datetime, end: dt.datetime
+                  ) -> tuple[dict[str, list[str]], int, list[dict]]:
+    """Search each query across [start, end).
+
+    YouTube returns at most ~500 results per search, newest first. When a
+    search hits that limit, the remaining (earlier) part of the day is
+    searched again as a new window ending where the previous results stopped.
+    This repeats until the whole day is covered or the quota budget
+    (max_search_units) is used up. Busy terms get extra windows; quiet terms
+    cost nothing extra.
+
+    Returns {video_id: [queries]}, quota units used, and a per-query report.
+    """
+    pages = cfg["pages_per_query"]
+    budget = int(cfg.get("max_search_units", 6000))
     hits: dict[str, list[str]] = {}
     units = 0
-    for query in cfg["queries"]:
-        token = None
-        for _ in range(cfg["pages_per_query"]):
-            params = {
-                "part": "id",
-                "q": query,
-                "type": "video",
-                "order": "date",
-                "publishedAfter": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "publishedBefore": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "maxResults": 50,
-            }
-            if cfg.get("relevance_language"):
-                params["relevanceLanguage"] = cfg["relevance_language"]
-            if token:
-                params["pageToken"] = token
-            data = yt_get("search", params, api_key)
-            units += 100
-            for item in data.get("items", []):
-                vid = item.get("id", {}).get("videoId")
-                if vid:
+    state = [{"query": q, "end": end, "windows": 0, "ids": set(),
+              "done": False, "stop": "complete"} for q in cfg["queries"]]
+
+    # Round-robin: every query gets its first window before any query gets a second.
+    while any(not st["done"] for st in state):
+        for st in state:
+            if st["done"]:
+                continue
+            if units + 100 > budget:
+                st["done"], st["stop"] = True, "budget"
+                continue
+            st["windows"] += 1
+            token, oldest, n_items, limited = None, None, 0, False
+            for page in range(pages):
+                if units + 100 > budget:
+                    limited = True
+                    break
+                params = {
+                    "part": "snippet",  # same quota cost as "id"; gives publish times
+                    "q": st["query"],
+                    "type": "video",
+                    "order": "date",
+                    "publishedAfter": _iso(start),
+                    "publishedBefore": _iso(st["end"]),
+                    "maxResults": 50,
+                }
+                if cfg.get("relevance_language"):
+                    params["relevanceLanguage"] = cfg["relevance_language"]
+                if token:
+                    params["pageToken"] = token
+                data = yt_get("search", params, api_key)
+                units += 100
+                for item in data.get("items", []):
+                    vid = item.get("id", {}).get("videoId")
+                    if not vid:
+                        continue
+                    n_items += 1
+                    st["ids"].add(vid)
                     found_by = hits.setdefault(vid, [])
-                    if query not in found_by:
-                        found_by.append(query)
-            token = data.get("nextPageToken")
-            if not token:
-                break
-    return hits, units
+                    if st["query"] not in found_by:
+                        found_by.append(st["query"])
+                    ts = _parse_ts(item.get("snippet", {}).get("publishedAt", ""))
+                    if ts and (oldest is None or ts < oldest):
+                        oldest = ts
+                token = data.get("nextPageToken")
+                if not token:
+                    break
+            else:
+                limited = bool(token)  # used every page and more remained
+            # YouTube also tends to stop handing out pages near its result cap,
+            # so a nearly full window counts as cut off too.
+            if n_items >= pages * 50 * 0.9:
+                limited = True
+
+            if not limited:
+                st["done"] = True
+                continue
+            if oldest is None or oldest <= start or oldest >= st["end"]:
+                st["done"] = True  # no progress possible
+                continue
+            # Continue with the earlier part of the day. +1s so same-second
+            # uploads aren't skipped (duplicates are removed anyway).
+            st["end"] = oldest + dt.timedelta(seconds=1)
+
+    report = []
+    for st in state:
+        covered_from = start if st["stop"] == "complete" else st["end"]
+        report.append({"query": st["query"], "found": len(st["ids"]),
+                       "windows": st["windows"], "complete": st["stop"] == "complete",
+                       "covered_from": covered_from.isoformat()})
+    return hits, units, report
 
 
 def fetch_details(ids: list[str], api_key: str) -> tuple[list[dict], int]:
@@ -380,7 +449,8 @@ def run(cfg: dict, out_dir: Path, use_classifier: bool,
         return None
     start, end = day_window(day, tz)
 
-    hits, units = search_videos(cfg, yt_key, start, end)
+    hits, units, search_report = search_videos(cfg, yt_key, start, end)
+    search_units = units
     items, detail_units = fetch_details(list(hits), yt_key)
     units += detail_units
     videos = [normalize(it, hits.get(it["id"], [])) for it in items]
@@ -444,14 +514,20 @@ def run(cfg: dict, out_dir: Path, use_classifier: bool,
             "classifier_model": cfg["classifier_model"] if use_classifier else None,
             "ai_label_filter": cfg.get("ai_label_filter", "show"),
         },
+        "search_report": search_report,
         "stats": {"found": len(videos), "kept": len(kept), "removed": len(removed),
                   "classified": len(labels), "youtube_quota_units": units,
+                  "search_quota_units": search_units,
                   "ai_label_returned": sum(v["ai_label"] is not None for v in videos),
                   "ai_labeled": sum(v["ai_label"] is True for v in videos)},
         "kept": [slim(v, True) for v in kept],
         "removed": [slim(v, False) for v in removed],
     }
     index = write_outputs(out_dir, date_str, payload)
+    for r in search_report:
+        cov = "full day" if r["complete"] else \
+            f"quota budget reached; covered from {dt.datetime.fromisoformat(r['covered_from']).astimezone(tz):%-I:%M %p}"
+        print(f"  {r['query']!r}: {r['found']} videos in {r['windows']} window(s), {cov}")
     print(f"{date_str}: found {len(videos)}, kept {len(kept)}, removed {len(removed)} "
           f"(YouTube quota ~{units} units, {len(to_classify)} sent to classifier; "
           f"AI label returned for {payload['stats']['ai_label_returned']}, "

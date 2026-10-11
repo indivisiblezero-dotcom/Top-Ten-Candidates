@@ -112,6 +112,7 @@ footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid va
 </div></div>
 
 <div class="wrap">
+  <div class="note" id="covNote" hidden></div>
   <div class="note" id="aiNote" hidden></div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" hidden>No videos match these filters.</div>
@@ -258,8 +259,20 @@ footer{margin-top:32px;color:var(--muted);font-size:13px;border-top:1px solid va
       (S.ai_label_filter === 'require' ? ' (only labeled videos were kept).' : '.');
   }
 
+  // ---------- search coverage ----------
+  const SR = D.search_report || [];
+  const tm = iso => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' });
+  const covText = SR.map(r => `"${r.query}": ${r.found} videos in ${r.windows} window${r.windows === 1 ? '' : 's'}` +
+    (r.complete ? '' : ` (covered only from ${tm(r.covered_from)} on; quota budget reached)`)).join(' · ');
+  const short = SR.filter(r => !r.complete);
+  if (short.length) {
+    $('covNote').hidden = false;
+    $('covNote').textContent = `Search coverage incomplete — ${short.map(r => `"${r.query}" covered only from ${tm(r.covered_from)}`).join('; ')}. ` +
+      `Raise max_search_units in config.json to cover the whole day.`;
+  }
+
   // ---------- footer ----------
-  $('footer').textContent =
+  $('footer').textContent = (covText ? `Search coverage: ${covText}. ` : '') +
     `Searches: ${S.queries.join(', ')}. Thresholds for this run: like/view ≥ ${S.min_like_ratio_pct}%, views ≥ ${S.min_views}, ` +
     `length ≥ ${S.min_duration_seconds}s, removed types: ${S.exclude_categories.join(', ') || 'none'}. ` +
     `The slider above can only raise the like/view threshold; to lower it, change MIN_LIKE_RATIO_PCT in the repository's Actions variables. ` +

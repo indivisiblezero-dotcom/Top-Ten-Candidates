@@ -1,6 +1,7 @@
 {
   "queries": ["AI film", "AI video", "AI music video"],
   "pages_per_query": 10,
+  "max_search_units": 6000,
   "relevance_language": "en",
   "timezone": "America/Los_Angeles",
 

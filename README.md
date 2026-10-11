@@ -73,6 +73,7 @@ You have three ways, from quickest to most permanent:
 |---|---|
 | `queries` | Search terms. Wrap a term in quotes (`"\"AI film\""`) for exact-phrase matching. |
 | `pages_per_query` | 50 results per page; each page costs 100 quota units. |
+| `max_search_units` | YouTube quota the searches may use per run (default 6000 of the 10,000 daily). When a term hits YouTube's ~500-result limit, the earlier part of the day is searched again in another window until the day is covered or this budget runs out. The page warns if any term's coverage was cut short. |
 | `relevance_language` | Prefer results in this language. Set to `""` for all languages. |
 | `min_duration_seconds` | Minimum length (default 60). |
 | `hidden_likes` | `"include"` keeps videos whose likes are hidden; `"exclude"` removes them. |
